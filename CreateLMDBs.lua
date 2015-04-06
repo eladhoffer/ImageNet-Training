@@ -40,13 +40,6 @@ function NameFile(filename)
     local name = paths.basename(filename,'JPEG')
     local substring = string.split(name,'_')
 
-    --local key
-    --if substring[1] == 'ILSVRC2012' then -- Validation file
-    --    key = ImageNetClasses.ClassNum2Wnid[ValidationLabels[tonumber(substring[3])]] .. '_' .. string.format('%06d', substring[3])
-    --else -- Training file
-    --    key = substring[1] .. '_' .. string.format('%06d', substring[2])
-    --end
-    --return key
     if substring[1] == 'ILSVRC2012' then -- Validation file
         local num = tonumber(substring[3])
         return config.ImageNetClasses.ClassNum2Wnid[config.ValidationLabels[num]] .. '_' .. num
@@ -83,7 +76,7 @@ end
 local TrainingFiles = FileSearcher{
     Name = 'TrainingFilenames',
     CachePrefix = config.TRAINING_DIR,
-    MaxNumItems = 1e7,
+    MaxNumItems = 1e8,
     CacheFiles = true,
     PathList = {config.TRAINING_PATH},
     SubFolders = true
@@ -91,7 +84,7 @@ local TrainingFiles = FileSearcher{
 local ValidationFiles = FileSearcher{
     Name = 'ValidationFilenames',
     CachePrefix = config.VALIDATION_DIR,
-    MaxNumItems = 1e7,
+    MaxNumItems = 1e8,
     PathList = {config.VALIDATION_PATH}
 }
 
@@ -106,7 +99,7 @@ local ValDB= lmdb.env{
 }
 
 TrainingFiles:ShuffleItems()
---LMDBFromFilenames(TrainingFiles.Data, TrainDB)
+LMDBFromFilenames(TrainingFiles.Data, TrainDB)
 LMDBFromFilenames(ValidationFiles.Data, ValDB)
 
 
