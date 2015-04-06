@@ -1,14 +1,17 @@
-A complete Deep Learning environment for ImageNet using Torch
-=============================================================
+Deep Learning on ImageNet using Torch
+=====================================
 This is a complete training example for Deep Convolutional Networks on the ILSVRC classification task.
+
 Data is preprocessed and cached as a LMDB data-base for fast reading. A separate thread buffers images from the LMDB record in the background. 
+
 Multiple GPUs are also supported by using nn.DataParallelTable (https://github.com/torch/cunn/blob/master/docs/cunnmodules.md).
+
 This code allows training at 4ms/sample with the AlexNet model and 2ms for testing on a single GPU (using Titan Z with 1 active gpu)
 
 ##Dependencies
 * "eladtools" (https://github.com/eladhoffer/eladtools) for DataProvider class and optimizer.
 * “lmdb.torch” (http://github.com/eladhoffer/lmdb.torch) for LMDB usage.
-* “cudnn.torch” (https://github.com/soumith/cudnn.torch) for faster training. Can be avoided by changing "cudnn"->"nn" in models.
+* “cudnn.torch” (https://github.com/soumith/cudnn.torch) for faster training. Can be avoided by changing "cudnn" to "nn" in models.
 
 
 ##Data
