@@ -1,147 +1,111 @@
 require 'eladtools'
-require 'image'
 require 'xlua'
-local gm = require 'graphicsmagick'
+require 'util'
+require 'lmdb'
+
+local Threads = require 'threads'
 local ffi = require 'ffi'
+local config = require 'Config'
 
--------------------------------Settings----------------------------------------------
-local TRAINING_PATH = '/home/ehoffer/Datasets/ImageNet/ILSVRC2012_img_train/'
-local VALIDATION_PATH = '/home/ehoffer/Datasets/ImageNet/ILSVRC2012_img_val/'
-local ImageSize = 256--224
-local LoadedImageSize = 256
-local BatchSize = 8192--2560
--------------------------------------------------------------------------------------
-
-local ImageNetClasses = torch.load('./ImageNetClasses')
-local ValidationLabels = torch.load('./ValidationLabels')
-
-for i=1001,#ImageNetClasses.ClassName do
-    ImageNetClasses.ClassName[i] = nil
-end
-------------------------------------------Data Functions-----------------------------------------------
-local LabelTraining = function(Item)
-    local fn = paths.basename(Item,'JPEG')
-    local wnid = string.split(fn,'_')[1]
-    local ClassNum = ImageNetClasses.Wnid2ClassNum[wnid]
-    return ClassNum
+-- Use random crop from the sample image
+function CropRandPatch(img, InputSize)
+    local nDim = img:dim()
+    local start_x = math.random(img:size(nDim)-InputSize)
+    local start_y = math.random(img:size(nDim-1)-InputSize)
+    return img:narrow(nDim,start_x,InputSize):narrow(nDim-1,start_y,InputSize)
 end
 
-local LabelValidation = function(Item)
-    local fn = paths.basename(Item,'JPEG')
-    local num_img = tonumber(string.split(fn,'_')[3])
-    return ValidationLabels[num_img]
+function CropCenterPatch(img, InputSize)
+    local nDim = img:dim()
+    local start_x = math.ceil((img:size(nDim)-InputSize)/2)
+    local start_y = math.ceil((img:size(nDim-1)-InputSize)/2)
+    return img:narrow(nDim,start_x,InputSize):narrow(nDim-1,start_y,InputSize)
 end
 
-local PreProcess = function(Img)
-    --local im = PadTensor(CropCenter(Img,ImageSize),ImageSize,ImageSize)--:add(-0.45):mul(4)--:add(-118.380948):div(61.896913)--:add(-0.45):mul(4)
+function Normalize(data, label)
+    return data:float():add(-config.DataMean):div(config.DataStd)
+end
 
-    local im = CropCenter(Img,ImageSize)--:add(-0.45):mul(4)--:add(-118.380948):div(61.896913)--:add(-0.45):mul(4)
-    if im:dim() == 2 then
-        im = im:reshape(1,im:size(1),im:size(2))
+
+
+local nthread = 1
+
+
+local threads = Threads(nthread,
+function()
+    require 'lmdb'
+    require 'eladtools'
+    require 'util'
+    --lmdb.verbose = false
+end,
+
+function()
+    ImageNetClasses = config.ImageNetClasses
+    SampleSize = config.SampleSize
+
+    function LabelFromKey(Item)
+        local wnid = string.split(Item,'_')[1]
+        local ClassNum = config.ImageNetClasses.Wnid2ClassNum[wnid]
+        return ClassNum
     end
-    if im:size(1) == 1 then
-        im=torch.repeatTensor(im,3,1,1)
-    end
-    if im:size(1) > 3 then
-        im = im[{{1,3},{},{}}]
-    end
-    return im
-end
 
-local LoadImg = function(filename)
-   return gm.Image(filename, LoadedImageSize):size(nil,LoadedImageSize):toTensor('byte','RGB','DHW')
-   -- return image.load(filename,3,'byte')
-end
-------------------------------------------Training Data----------------------------------------------
-local GetFromFilenameTraining = function(charTensor,_)
-    local Images = torch.ByteTensor(charTensor:size(1), 3, ImageSize, ImageSize)
-    local Labels = torch.LongTensor(charTensor:size(1))
-    for i=1,charTensor:size(1) do
-        local data = torch.data(charTensor[i])
-        local filename = ffi.string(data)
-        Labels[i] = LabelTraining(filename)
-        local img = PreProcess(LoadImg(filename))
-        if img:size(2)~= ImageSize or img:size(3) ~= ImageSize or img:size(1) ~= 3 or img:dim()~=3 then
-            print(img:size())
-        end
-        Images[i] =img 
-        xlua.progress(i,charTensor:size(1))
+    function ExtractFromLMDB(key, data)
+        local class = LabelFromKey(data.Name)
+        return data.Data, class
     end
-    return Images, Labels
-end
 
-
---------------------------------------------Validation Data----------------------------------------------
-local GetFromFilenameValidation = function(charTensor,_)
-    local Images = torch.FloatTensor(charTensor:size(1), 3, ImageSize, ImageSize)
-    local Labels = torch.FloatTensor(charTensor:size(1))
-    for i=1,charTensor:size(1) do
-        local data = torch.data(charTensor[i])
-        local filename = ffi.string(data)
-        Labels[i] = LabelValidation(filename)
-        local img = PreProcess(LoadImg(filename))
-        if img == nil then
-            print('Image is buggy')
-            print(filename)
-            Images[i] = Images[1]
+    function CacheRand(env, locations)
+        local num
+        if type(locations) == 'table' then
+            num = #locations
         else
-            Images[i] = img
+            num = locations:size(1)
         end
-        xlua.progress(i,charTensor:size(1))
+        local txn = env:txn(true)
+        local Data = torch.ByteTensor(num ,unpack(config.SampleSize))
+        local Labels = torch.LongTensor(num)
+        for i = 1, num do
+            local data = txn:get(self.Keys[i])
+            Data[i], Labels[i] = ExtractFromLMDB(locations[i], data)
+        end
+        txn:abort()
+        return Data, Labels
     end
-    return Images, Labels
+
+    function CacheSeq(env, start_pos, num)
+        local num = num or 1
+        local txn = env:txn(true)
+        local cursor = txn:cursor()
+        cursor:set(string.format('%07d',start_pos))
+
+        local Data = torch.ByteTensor(num ,unpack(SampleSize))
+        local Labels = torch.LongTensor(num)
+        for i = 1, num do
+            local key, data = cursor:get()
+            if key == nil or data == nil then
+                print(i+start_pos-1)
+            end
+            Data[i], Labels[i] = ExtractFromLMDB(key, data)
+            cursor:next()
+        end
+        cursor:close()
+        txn:abort()
+        return Data, Labels
+    end
+
+
 end
+)
 
--------------- Getting Filenames ----------------------------
-local VALIDATION_DIR = './Data/ValidationCache/'
-local TRAINING_DIR = './Data/TrainingCache/'
 
-local TrainingFiles = FileSearcher{
-    Name = 'TrainingFilenames',
-    CachePrefix = TRAINING_DIR,
-    MaxNumItems = 1e7,
-    CacheFiles = true,
-    PathList = {TRAINING_PATH},
-    Shuffle = false,--true,
-    SubFolders = true
-}
-local ValidationFiles = FileSearcher{
-    Name = 'ValidationFilenames',
-    CachePrefix = VALIDATION_DIR,
-    MaxNumItems = 1e7,
-    CacheFiles = true,
-    PathList = {VALIDATION_PATH}
-}
-----------------------------------------------------------------
+local ValDB = lmdb.env({Path = config.VALIDATION_DIR, RDONLY = true})
+local TrainDB = lmdb.env({Path = config.TRAINING_DIR, RDONLY = true})
 
-local TrainingData = DataProvider{
-    Name = 'TrainingData',
-    CachePrefix = TRAINING_DIR,
-    CacheFiles = true,
-    Source = TrainingFiles,
-    MaxNumItems = BatchSize,
-    CopyData = false,
-    TensorType = 'torch.ByteTensor',
-    ExtractFunction = GetFromFilenameTraining,
-    DataContainer = false
 
-}
-local ValidationData = DataProvider{
-    Name = 'ValidationData',
-    CachePrefix = VALIDATION_DIR,
-    CacheFiles = true,
-    Source = ValidationFiles,
-    MaxNumItems = BatchSize,
-    CopyData = false,
-    TensorType = 'torch.ByteTensor',
-    ExtractFunction = GetFromFilenameValidation,
-    DataContainer = false
-
-}
-
---------------------------------------------Returned Values----------------------------------------------
-return{
-    TrainingData = TrainingData,
-    ValidationData = ValidationData,
-    ImageNetClasses = ImageNetClasses
+return {
+    ImageNetClasses = config.ImageNetClasses,
+    ValDB = ValDB,
+    TrainDB = TrainDB,
+    ImageSize = config.ImageSize,
+    Threads = threads
 }
