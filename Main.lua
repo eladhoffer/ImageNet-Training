@@ -219,15 +219,17 @@ local function Forward(DB, train)
         while MiniBatch:GetNextBatch() do
             if ccn2_compatibility==false or math.fmod(x:size(1),32)==0 then
                 if train then
-                    y, curr_loss = optimizer:optimize(x, yt)
                     if opt.nGPU > 1 then
+                        model:zeroGradParameters()
                         model:syncParameters()
                     end
+
+                    y, curr_loss = optimizer:optimize(x, yt)
+
                 else
                     y = model:forward(x)
                     curr_loss = loss:forward(y,yt)
                 end
-                --image.saveJPG('test',image.toDisplayTensor(x))
                 loss_val = curr_loss + loss_val
                 confusion:batchAdd(y,yt)
             end
@@ -253,12 +255,12 @@ end
 ------------------------------
 local epoch = 1
 while true do
-    print('Epoch ' .. epoch) 
+    print('\nEpoch ' .. epoch) 
     local LossTrain = Train(data.TrainDB)
     torch.save(weights_filename .. '_' .. epoch .. '.t7', Weights)
     confusion:updateValids()
     local ErrTrain = (1-confusion.totalValid)
-    print('Training Loss: ' .. LossTrain)
+    print('\nTraining Loss: ' .. LossTrain)
     print('Training Classification Error: ' .. ErrTrain)
 
     local LossVal = Test(data.ValDB)
@@ -266,7 +268,7 @@ while true do
     local ErrVal = (1-confusion.totalValid)
 
 
-    print('Validation Loss: ' .. LossVal)
+    print('\nValidation Loss: ' .. LossVal)
     print('Validation Classification Error = ' .. ErrVal)
     Log:add{['Training Error']= ErrTrain, ['Validation Error'] = ErrVal}
         
