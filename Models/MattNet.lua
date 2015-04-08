@@ -6,13 +6,13 @@ local SpatialMaxPooling = cudnn.SpatialMaxPooling
 local ReLU = cudnn.ReLU
 
 local features = nn.Sequential()
-model:add(SpatialConvolution(3,96,7,7,2,2,2,2))       -- 224 -> 111
-model:add(ReLU(true))
-model:add(SpatialMaxPooling(3,3,2,2))                   -- 110 -> 55
-model:add(SpatialConvolution(96,256,5,5,2,2,1,1))       --  55 -> 27
-model:add(ReLU(true))
-model:add(SpatialMaxPooling(3,3,2,2))                   --  27 ->  13
-model:add(SpatialConvolution(256,384,3,3,1,1,1,1))      --  13 ->  13
+features:add(SpatialConvolution(3,96,7,7,2,2,2,2))       -- 224 -> 111
+features:add(ReLU(true))
+features:add(SpatialMaxPooling(3,3,2,2))                   -- 110 -> 55
+features:add(SpatialConvolution(96,256,5,5,2,2,1,1))       --  55 -> 27
+features:add(ReLU(true))
+features:add(SpatialMaxPooling(3,3,2,2))                   --  27 ->  13
+features:add(SpatialConvolution(256,384,3,3,1,1,1,1))      --  13 ->  13
 features:add(ReLU(true))
 features:add(SpatialConvolution(384,256,3,3,1,1,1,1))      --  13 ->  13
 features:add(ReLU(true))
