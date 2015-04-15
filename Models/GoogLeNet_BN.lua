@@ -12,11 +12,12 @@ local ReLU = cudnn.ReLU
 local BNInception = false
 
 ---------------------------------------Inception Modules-------------------------------------------------
-local Inception = function(nInput, n1x1, n3x3r, n3x3, dn3x3r, dn3x3, nPoolProj, type_pool)
+local Inception = function(nInput, n1x1, n3x3r, n3x3, dn3x3r, dn3x3, nPoolProj, type_pool,stride)
+    local stride = stride or 1
     local InceptionModule = nn.Concat(DimConcat)
 
     if n1x1>0 then
-        InceptionModule:add(nn.Sequential():add(SpatialConvolution(nInput,n1x1,1,1,1,1)))
+        InceptionModule:add(nn.Sequential():add(SpatialConvolution(nInput,n1x1,1,1,stride,stride)))
     end
 
     if n3x3>0 and n3x3r>0 then
@@ -27,7 +28,7 @@ local Inception = function(nInput, n1x1, n3x3r, n3x3, dn3x3r, dn3x3, nPoolProj, 
             Module_3x3:add(nn.SpatialBatchNormalization(0))
         end
 
-        Module_3x3:add(SpatialConvolution(n3x3r,n3x3,3,3,1,1,1,1))
+        Module_3x3:add(SpatialConvolution(n3x3r,n3x3,3,3,stride,stride,1,1))
         InceptionModule:add(Module_3x3)
     end
 
@@ -45,16 +46,16 @@ local Inception = function(nInput, n1x1, n3x3r, n3x3, dn3x3r, dn3x3, nPoolProj, 
             Module_d3x3:add(nn.SpatialBatchNormalization(0))
         end
 
-        Module_d3x3:add(SpatialConvolution(dn3x3r,dn3x3,3,3,1,1,1,1))
+        Module_d3x3:add(SpatialConvolution(dn3x3r,dn3x3,3,3,stride,stride,1,1))
 
         InceptionModule:add(Module_d3x3)
     end
 
     local PoolProj = nn.Sequential()
     if type_pool == 'avg' then
-        PoolProj:add(SpatialAveragePooling(3,3,1,1,1,1):ceil())
+        PoolProj:add(SpatialAveragePooling(3,3,stride,stride,1,1))
     elseif type_pool == 'max' then
-        PoolProj:add(SpatialMaxPooling(3,3,1,1,1,1):ceil())
+        PoolProj:add(SpatialMaxPooling(3,3,stride,stride,1,1))
     end
     if nPoolProj > 0 then
         PoolProj:add(SpatialConvolution(nInput, nPoolProj, 1, 1))
@@ -91,11 +92,9 @@ model:add(Inception(256,64,64,96,64,96,64,'avg'))  --(3b) 256x28x28 -> 320x28x28
 model:add(ReLU(true))
 model:add(nn.SpatialBatchNormalization(0))
 
-model:add(Inception(320,0,128,160,64,96,0,'max')) --(3c) 320x28x28 -> 576x28x28
+model:add(Inception(320,0,128,160,64,96,0,'max',2)) --(3c) 320x28x28 -> 576x14x14
 model:add(ReLU(true))
 model:add(nn.SpatialBatchNormalization(0))
-
-model:add(SpatialConvolution(576,576,2,2,2,2)) -- 576x28x28 -> 576x14x14
 
 model:add(Inception(576,224,64,96,96,128,128,'avg'))  --(4a) 576x14x14 -> 576x14x14
 model:add(ReLU(true))
@@ -114,11 +113,9 @@ model:add(ReLU(true))
 model:add(nn.SpatialBatchNormalization(0))
 
 
-model:add(Inception(576,0,128,192,192,256,0,'max'))  --(4e) 576x14x14 -> 576x14x14
+model:add(Inception(576,0,128,192,192,256,0,'max',2))  --(4e) 576x14x14 -> 1024x7x7
 model:add(ReLU(true))
 model:add(nn.SpatialBatchNormalization(0))
-
-model:add(SpatialConvolution(1024,1024,2,2,2,2)) -- 1024x14x14 -> 1024x7x7
 
 model:add(Inception(1024,352,192,320,160,224,128,'avg'))  --(5a) 1024x7x7 -> 1024x7x7
 model:add(ReLU(true))
