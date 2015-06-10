@@ -52,5 +52,4 @@ Buffer size should be adjusted to suit the used hardware and configuration. Defa
 |nGPU             |  1                   | num of gpu devices used
 |load             |  none                | load existing net weights
 |save             |  time-identifier     | save directory
-|shuffle          |  false               | shuffle training samples
-|augment          |  true                | Augment training data
+|shuffle          |  true               | shuffle training samples
