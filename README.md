@@ -17,8 +17,9 @@ This code allows training at 4ms/sample with the AlexNet model and 2ms for testi
 ##Data
 * To get the ILSVRC data, you should register on their site for access: http://www.image-net.org/
 * Configure the data location and save dir in **Config.lua**.
-* LMDB records for fast read access are created by running **CreateLMDBs.lua**. Saving the default 256x256 image for each sample will result with
-a ~350GB file for training data, and a ~13.2GB file for validation data.
+* LMDB records for fast read access are created by running **CreateLMDBs.lua**. 
+It defaults to saving the compressed jpgs (about ~20GB for training data, ~1GB for validation data).
+
 
 ##Training
 You can start training using:
