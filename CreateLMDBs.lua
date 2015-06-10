@@ -27,8 +27,7 @@ end
 
 
 local LoadImgData = function(filename)
-    --local img = image.load(filename)
-    local img = gm.Image(filename):toTensor('float','RGB','DHW')
+    --local img = image.load(filename)    local img = gm.Image(filename):toTensor('float','RGB','DHW')
     if img == nil then
         print('Image is buggy')
         print(filename)
@@ -42,70 +41,70 @@ local LoadImgData = function(filename)
     end
 end
 
-    function NameFile(filename)
-        local name = paths.basename(filename,'JPEG')
-        local substring = string.split(name,'_')
+function NameFile(filename)
+    local name = paths.basename(filename,'JPEG')
+    local substring = string.split(name,'_')
 
-        if substring[1] == 'ILSVRC2012' then -- Validation file
-            local num = tonumber(substring[3])
-            return config.ImageNetClasses.ClassNum2Wnid[config.ValidationLabels[num]] .. '_' .. num
-        else -- Training file
-            return name
-        end
-
+    if substring[1] == 'ILSVRC2012' then -- Validation file
+        local num = tonumber(substring[3])
+        return config.ImageNetClasses.ClassNum2Wnid[config.ValidationLabels[num]] .. '_' .. num
+    else -- Training file
+        return name
     end
 
-    function LMDBFromFilenames(charTensor,env)
-        env:open()
-        local txn = env:txn()
-        local cursor = txn:cursor()
-        for i=1,charTensor:size(1) do
-            local filename = ffi.string(torch.data(charTensor[i]))
-            local data = {Data = LoadImgData(filename), Name = NameFile(filename)}
+end
 
-            cursor:put(config.Key(i),data, lmdb.C.MDB_NODUPDATA) 
-            if i % 1000 == 0 then
-                txn:commit()
-                print(env:stat())
-                collectgarbage()
-                txn = env:txn()
-                cursor = txn:cursor()
-            end
-            xlua.progress(i,charTensor:size(1))
+function LMDBFromFilenames(charTensor,env)
+    env:open()
+    local txn = env:txn()
+    local cursor = txn:cursor()
+    for i=1,charTensor:size(1) do
+        local filename = ffi.string(torch.data(charTensor[i]))
+        local data = {Data = LoadImgData(filename), Name = NameFile(filename)}
+
+        cursor:put(config.Key(i),data, lmdb.C.MDB_NODUPDATA) 
+        if i % 1000 == 0 then
+            txn:commit()
+            print(env:stat())
+            collectgarbage()
+            txn = env:txn()
+            cursor = txn:cursor()
         end
-        txn:commit()
-        env:close()
-
+        xlua.progress(i,charTensor:size(1))
     end
+    txn:commit()
+    env:close()
+
+end
 
 
-    local TrainingFiles = FileSearcher{
-        Name = 'TrainingFilenames',
-        CachePrefix = config.TRAINING_DIR,
-        MaxNumItems = 1e8,
-        CacheFiles = true,
-        PathList = {config.TRAINING_PATH},
-        SubFolders = true
-    }
-    local ValidationFiles = FileSearcher{
-        Name = 'ValidationFilenames',
-        CachePrefix = config.VALIDATION_DIR,
-        MaxNumItems = 1e8,
-        PathList = {config.VALIDATION_PATH}
-    }
+local TrainingFiles = FileSearcher{
+    Name = 'TrainingFilenames',
+    CachePrefix = config.TRAINING_DIR,
+    MaxNumItems = 1e8,
+    CacheFiles = true,
+    PathList = {config.TRAINING_PATH},
+    SubFolders = true
+}
+local ValidationFiles = FileSearcher{
+    Name = 'ValidationFilenames',
+    CachePrefix = config.VALIDATION_DIR,
+    MaxNumItems = 1e8,
+    PathList = {config.VALIDATION_PATH}
+}
 
-    local TrainDB= lmdb.env{
-        Path = config.TRAINING_DIR,
-        Name = 'TrainDB'
-    }
+local TrainDB= lmdb.env{
+    Path = config.TRAINING_DIR,
+    Name = 'TrainDB'
+}
 
-    local ValDB= lmdb.env{
-        Path = config.VALIDATION_DIR,
-        Name = 'ValDB'
-    }
+local ValDB= lmdb.env{
+    Path = config.VALIDATION_DIR,
+    Name = 'ValDB'
+}
 
-    TrainingFiles:ShuffleItems()
-    --LMDBFromFilenames(ValidationFiles.Data, ValDB)
-    LMDBFromFilenames(TrainingFiles.Data, TrainDB)
+TrainingFiles:ShuffleItems()
+LMDBFromFilenames(ValidationFiles.Data, ValDB)
+LMDBFromFilenames(TrainingFiles.Data, TrainDB)
 
 

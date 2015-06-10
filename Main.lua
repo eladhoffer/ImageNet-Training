@@ -38,7 +38,7 @@ cmd:option('-save',               os.date():gsub(' ',''), 'save directory')
 cmd:option('-checkpoint',         0,                      'Save a weight check point every n samples. 0 for off')
 
 cmd:text('===>Data Options')
-cmd:option('-shuffle',            false,                  'shuffle training samples')
+cmd:option('-shuffle',            true,                  'shuffle training samples')
 
 
 opt = cmd:parse(arg or {})
@@ -153,7 +153,7 @@ local function Forward(DB, train)
     local SizeData = DB:size()
     if not AllowVarBatch then SizeData = math.floor(SizeData/opt.batchSize)*opt.batchSize end
     local dataIndices = torch.range(1, SizeData, opt.bufferSize):long()
-    if train then --shuflle batches from LMDB 
+    if train and opt.shuffle then --shuflle batches from LMDB 
         dataIndices = dataIndices:index(1, torch.randperm(dataIndices:size(1)):long())
     end 
 

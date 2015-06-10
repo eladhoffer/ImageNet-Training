@@ -1,6 +1,5 @@
 require 'eladtools'
 require 'xlua'
-require 'util'
 require 'lmdb'
 
 local Threads = require 'threads'
@@ -25,6 +24,7 @@ end
 function Normalize(data)
     return data:float():add(-config.DataMean):div(config.DataStd)
 end
+
 function ExtractFromLMDBTrain(key, data)
     local wnid = string.split(data.Name,'_')[1]
     local class = config.ImageNetClasses.Wnid2ClassNum[wnid]
@@ -36,7 +36,7 @@ function ExtractFromLMDBTrain(key, data)
     local start_x = math.random(img:size(nDim)-config.InputSize)
     local start_y = math.random(img:size(nDim-1)-config.InputSize)
     img = img:narrow(nDim,start_x,config.InputSize):narrow(nDim-1,start_y,config.InputSize)
-    
+
     local hflip = math.random(2)==1
     if hflip then
         img = image.hflip(img)
