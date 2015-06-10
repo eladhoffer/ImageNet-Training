@@ -12,8 +12,8 @@ return
 {
     TRAINING_PATH = '/home/ehoffer/Datasets/ImageNet/train/',
     VALIDATION_PATH = '/home/ehoffer/Datasets/ImageNet/validation/',
-    VALIDATION_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB_Compressed/validation/',
-    TRAINING_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB_Compressed/train/',
+    VALIDATION_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB/validation/',
+    TRAINING_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB/train/',
     ImageSize = 256,
     SampleSize = {3,224,224},
     ValidationLabels = torch.load('./ValidationLabels'),
