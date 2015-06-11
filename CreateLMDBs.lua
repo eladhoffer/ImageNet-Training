@@ -27,7 +27,7 @@ end
 
 
 local LoadImgData = function(filename)
-    --local img = image.load(filename)    local img = gm.Image(filename):toTensor('float','RGB','DHW')
+    local img = gm.Image(filename):toTensor('float','RGB','DHW')
     if img == nil then
         print('Image is buggy')
         print(filename)

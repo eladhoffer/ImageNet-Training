@@ -35,6 +35,7 @@ cmd:option('-nGPU',               1,                      'num of gpu devices us
 cmd:text('===>Save/Load Options')
 cmd:option('-load',               '',                     'load existing net weights')
 cmd:option('-save',               os.date():gsub(' ',''), 'save directory')
+cmd:option('-optState',           false,                  'Save optimization state every epoch')
 cmd:option('-checkpoint',         0,                      'Save a weight check point every n samples. 0 for off')
 
 cmd:text('===>Data Options')
@@ -50,7 +51,15 @@ cutorch.setDevice(opt.devid)
 torch.setdefaulttensortype('torch.FloatTensor')
 ----------------------------------------------------------------------
 -- Model + Loss:
-local model = require(opt.network)
+local model 
+if paths.filep(opt.load) then
+    require 'cunn'
+    require 'cudnn'
+    model = torch.load(opt.load)
+    print('==>Loaded Net from: ' .. opt.load)
+else
+    model = require(opt.network)
+end
 local loss = nn.ClassNLLCriterion()
 -- classes
 local config = require 'Config'
@@ -61,6 +70,7 @@ local classes = data.ImageNetClasses.ClassName
 
 -- This matrix records the current confusion across classes
 local confusion = optim.ConfusionMatrix(classes)
+
 
 local AllowVarBatch = true
 for _,m in pairs(model.modules) do
@@ -76,9 +86,8 @@ end
 
 -- Output files configuration
 os.execute('mkdir -p ' .. opt.save)
-os.execute('cp ' .. opt.network .. '.lua ' .. opt.save)
 cmd:log(opt.save .. '/Log.txt', opt)
-local weightsFilename = paths.concat(opt.save, 'modelWeights')
+local netFilename = paths.concat(opt.save, 'Net')
 local logFilename = paths.concat(opt.save,'ErrorRate.log')
 local optStateFilename = paths.concat(opt.save,'optState')
 local Log = optim.Logger(logFilename)
@@ -107,7 +116,6 @@ if opt.nGPU > 1 then
         cutorch.setDevice(i)
         model:add(net:clone():cuda(), i)  -- Use the ith GPU
     end
-    AllowVarBatch = false
     cutorch.setDevice(opt.devid)
 end
 
@@ -115,13 +123,12 @@ end
 local Weights,Gradients = model:getParameters()
 print(Weights:nElement() ..  ' Parameters')
 
-if paths.filep(opt.load) then
-    local w = torch.load(opt.load)
-    print('==>Loaded Weights from: ' .. opt.load)
-    Weights:copy(w)  
-end
+local savedModel --savedModel - lower footprint model to save 
 if opt.nGPU > 1 then
     model:syncParameters()
+    savedModel = model.modules[1]:clone('weight','bias','running_mean','running_std')
+else 
+    savedModel = model:clone('weight','bias','running_mean','running_std')
 end
 
 --------------Optimization Configuration--------------------------
@@ -224,7 +231,7 @@ local function Forward(DB, train)
         if train and opt.checkpoint >0 and NumSamples % opt.checkpoint == 0 then
             confusion:updateValids()
             print('\nAfter ' .. NumSamples .. ' samples, current error is: ' .. 1-confusion.totalValid .. '\n')
-            torch.save(weightsFilename .. '_checkpoint' .. '.t7', savedModel)
+            torch.save(netFilename .. '_checkpoint' .. '.t7', savedModel)
         end
         collectgarbage()
     end
@@ -245,12 +252,15 @@ end
 ------------------------------
 data.ValDB:Threads()
 data.TrainDB:Threads()
+
 local epoch = 1
 while true do
     print('\nEpoch ' .. epoch) 
     local LossTrain = Train(data.TrainDB)
-    torch.save(weightsFilename .. '_' .. epoch .. '.t7', savedModel)
-    torch.save(optStateFilename .. '_' .. epoch .. '.t7', optimState)
+    torch.save(netFilename .. '_' .. epoch .. '.t7', savedModel)
+    if opt.optState then
+        torch.save(optStateFilename .. '_epoch_' .. epoch .. '.t7', optimState)
+    end
     confusion:updateValids()
     local ErrTrain = (1-confusion.totalValid)
     print('\nTraining Loss: ' .. LossTrain)
