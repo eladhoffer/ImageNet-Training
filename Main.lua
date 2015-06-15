@@ -31,6 +31,7 @@ cmd:option('-type',               'cuda',                 'float or cuda')
 cmd:option('-bufferSize',         1280,                   'buffer size')
 cmd:option('-devid',              1,                      'device ID (if using CUDA)')
 cmd:option('-nGPU',               1,                      'num of gpu devices used')
+cmd:option('-constBatchSize',     false,                  'do not allow varying batch sizes - e.g for ccn2 kernel')
 
 cmd:text('===>Save/Load Options')
 cmd:option('-load',               '',                     'load existing net weights')
@@ -60,7 +61,16 @@ if paths.filep(opt.load) then
 else
     model = require(opt.network)
 end
+
 local loss = nn.ClassNLLCriterion()
+
+if torch.type(model) == 'table' then
+    if model.loss then
+        loss = model.loss
+    end
+    model = model.model
+end
+
 -- classes
 local config = require 'Config'
 config.InputSize = model.InputSize or 224
@@ -72,13 +82,7 @@ local classes = data.ImageNetClasses.ClassName
 local confusion = optim.ConfusionMatrix(classes)
 
 
-local AllowVarBatch = true
-for _,m in pairs(model.modules) do
-    if torch.type(m):find('ccn2') then
-        AllowVarBatch = false
-        break
-    end
-end
+local AllowVarBatch = not opt.constBatchSize
 
 
 ----------------------------------------------------------------------
@@ -224,6 +228,9 @@ local function Forward(DB, train)
                 currLoss = loss:forward(y,yt)
             end
             loss_val = currLoss + loss_val
+            if type(y) == 'table' then
+                y = y[1]
+            end
             confusion:batchAdd(y,yt)
             NumSamples = NumSamples+x:size(1)
             xlua.progress(NumSamples, SizeData)
