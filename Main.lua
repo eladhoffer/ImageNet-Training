@@ -96,11 +96,6 @@ local logFilename = paths.concat(opt.save,'ErrorRate.log')
 local optStateFilename = paths.concat(opt.save,'optState')
 local Log = optim.Logger(logFilename)
 ----------------------------------------------------------------------
-print '==> Network'
-print(model)
-print '==> Loss'
-print(loss)
-
 ----------------------------------------------------------------------
 
 local TensorType = 'torch.FloatTensor'
@@ -125,7 +120,6 @@ end
 
 -- Optimization configuration
 local Weights,Gradients = model:getParameters()
-print(Weights:nElement() ..  ' Parameters')
 
 local savedModel --savedModel - lower footprint model to save 
 if opt.nGPU > 1 then
@@ -134,6 +128,13 @@ if opt.nGPU > 1 then
 else 
     savedModel = model:clone('weight','bias','running_mean','running_std')
 end
+
+print '==> Network'
+print(model)
+print '==> Loss'
+print(loss)
+print('==>' .. Weights:nElement() ..  ' Parameters')
+
 
 --------------Optimization Configuration--------------------------
 
@@ -228,7 +229,7 @@ local function Forward(DB, train)
                 currLoss = loss:forward(y,yt)
             end
             loss_val = currLoss + loss_val
-            if type(y) == 'table' then
+            if type(y) == 'table' then --table results - always take first prediction
                 y = y[1]
             end
             confusion:batchAdd(y,yt)
