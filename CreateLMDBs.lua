@@ -32,11 +32,11 @@ local LoadImgData = function(filename)
         print('Image is buggy')
         print(filename)
         os.exit()
-    end 
+    end
     img = PreProcess(img)
     if config.Compressed then
         return image.compressJPG(img)
-    else 
+    else
         return img
     end
 end
@@ -62,7 +62,7 @@ function LMDBFromFilenames(charTensor,env)
         local filename = ffi.string(torch.data(charTensor[i]))
         local data = {Data = LoadImgData(filename), Name = NameFile(filename)}
 
-        cursor:put(config.Key(i),data, lmdb.C.MDB_NODUPDATA) 
+        cursor:put(config.Key(i),data, lmdb.C.MDB_NODUPDATA)
         if i % 1000 == 0 then
             txn:commit()
             print(env:stat())
@@ -106,5 +106,3 @@ local ValDB= lmdb.env{
 TrainingFiles:ShuffleItems()
 LMDBFromFilenames(ValidationFiles.Data, ValDB)
 LMDBFromFilenames(TrainingFiles.Data, TrainDB)
-
-
