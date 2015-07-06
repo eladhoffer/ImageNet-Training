@@ -35,166 +35,166 @@ cmd:option('-nGPU',               1,                        'num of gpu devices 
 cmd:option('-constBatchSize',     false,                    'do not allow varying batch sizes - e.g for ccn2 kernel')
 
 cmd:text('===>Save/Load Options')
-cmd:option('-load',               '',                     'load existing net weights')
-cmd:option('-save',               os.date():gsub(' ',''), 'save directory')
-cmd:option('-optState',           false,                  'Save optimization state every epoch')
-cmd:option('-checkpoint',         0,                      'Save a weight check point every n samples. 0 for off')
+cmd:option('-load',               '',                       'load existing net weights')
+cmd:option('-save',               os.date():gsub(' ',''),   'save directory')
+cmd:option('-optState',           false,                    'Save optimization state every epoch')
+cmd:option('-checkpoint',         0,                        'Save a weight check point every n samples. 0 for off')
 
 cmd:text('===>Data Options')
-cmd:option('-shuffle',            true,                   'shuffle training samples')
+cmd:option('-shuffle',            true,                     'shuffle training samples')
 
 
-  opt = cmd:parse(arg or {})
-  opt.network = opt.modelsFolder .. paths.basename(opt.network, '.lua')
-  opt.save = paths.concat('./Results', opt.save)
-  torch.setnumthreads(opt.threads)
-  cutorch.setDevice(opt.devid)
+opt = cmd:parse(arg or {})
+opt.network = opt.modelsFolder .. paths.basename(opt.network, '.lua')
+opt.save = paths.concat('./Results', opt.save)
+torch.setnumthreads(opt.threads)
+cutorch.setDevice(opt.devid)
 
-  torch.setdefaulttensortype('torch.FloatTensor')
-  ----------------------------------------------------------------------
-  -- Model + Loss:
-  local model = require(opt.network)
+torch.setdefaulttensortype('torch.FloatTensor')
+----------------------------------------------------------------------
+-- Model + Loss:
+local model = require(opt.network)
 
-  local loss = nn.ClassNLLCriterion()
+local loss = nn.ClassNLLCriterion()
 
-  if torch.type(model) == 'table' then
+if torch.type(model) == 'table' then
     if model.loss then
-      loss = model.loss
+        loss = model.loss
     end
     model = model.model
-  end
+end
 
-  if paths.filep(opt.load) then
+if paths.filep(opt.load) then
     model = torch.load(opt.load)
     print('==>Loaded Net from: ' .. opt.load)
-  end
-  -- classes
-  local config = require 'Config'
-  config.InputSize = model.InputSize or 224
+end
+-- classes
+local config = require 'Config'
+config.InputSize = model.InputSize or 224
 
-  local data = require 'Data'
-  local classes = data.ImageNetClasses.ClassName
+local data = require 'Data'
+local classes = data.ImageNetClasses.ClassName
 
-  -- This matrix records the current confusion across classes
-  local confusion = optim.ConfusionMatrix(classes)
-
-
-  local AllowVarBatch = not opt.constBatchSize
+-- This matrix records the current confusion across classes
+local confusion = optim.ConfusionMatrix(classes)
 
 
-  ----------------------------------------------------------------------
+local AllowVarBatch = not opt.constBatchSize
 
 
-  -- Output files configuration
-  os.execute('mkdir -p ' .. opt.save)
-  cmd:log(opt.save .. '/Log.txt', opt)
-  local netFilename = paths.concat(opt.save, 'Net')
-  local logFilename = paths.concat(opt.save,'ErrorRate.log')
-  local optStateFilename = paths.concat(opt.save,'optState')
-  local Log = optim.Logger(logFilename)
-  ----------------------------------------------------------------------
+----------------------------------------------------------------------
 
-  local TensorType = 'torch.FloatTensor'
-  if opt.type =='cuda' then
+
+-- Output files configuration
+os.execute('mkdir -p ' .. opt.save)
+cmd:log(opt.save .. '/Log.txt', opt)
+local netFilename = paths.concat(opt.save, 'Net')
+local logFilename = paths.concat(opt.save,'ErrorRate.log')
+local optStateFilename = paths.concat(opt.save,'optState')
+local Log = optim.Logger(logFilename)
+----------------------------------------------------------------------
+
+local TensorType = 'torch.FloatTensor'
+if opt.type =='cuda' then
     model:cuda()
     loss = loss:cuda()
     TensorType = 'torch.CudaTensor'
-  end
+end
 
 
 
-  ---Support for multiple GPUs - currently data parallel scheme
-  if opt.nGPU > 1 then
+---Support for multiple GPUs - currently data parallel scheme
+if opt.nGPU > 1 then
     local net = model
     model = nn.DataParallelTable(1)
     for i = 1, opt.nGPU do
-      cutorch.setDevice(i)
-      model:add(net:clone():cuda(), i)  -- Use the ith GPU
+        cutorch.setDevice(i)
+        model:add(net:clone():cuda(), i)  -- Use the ith GPU
     end
     cutorch.setDevice(opt.devid)
-  end
+end
 
-  -- Optimization configuration
-  local Weights,Gradients = model:getParameters()
+-- Optimization configuration
+local Weights,Gradients = model:getParameters()
 
-  local savedModel --savedModel - lower footprint model to save
-  if opt.nGPU > 1 then
+local savedModel --savedModel - lower footprint model to save
+if opt.nGPU > 1 then
     model:syncParameters()
     savedModel = model.modules[1]:clone('weight','bias','running_mean','running_std')
-  else
+else
     savedModel = model:clone('weight','bias','running_mean','running_std')
-  end
+end
 
-  ----------------------------------------------------------------------
-  print '==> Network'
-  print(model)
-  print('==>' .. Weights:nElement() ..  ' Parameters')
+----------------------------------------------------------------------
+print '==> Network'
+print(model)
+print('==>' .. Weights:nElement() ..  ' Parameters')
 
-  print '==> Loss'
-  print(loss)
+print '==> Loss'
+print(loss)
 
 
-  ------------------Optimization Configuration--------------------------
+------------------Optimization Configuration--------------------------
 
-  local optimState = {
+local optimState = {
     learningRate = opt.LR,
     momentum = opt.momentum,
     weightDecay = opt.weightDecay,
     learningRateDecay = opt.LRDecay
-  }
+}
 
-  local optimizer = Optimizer{
+local optimizer = Optimizer{
     Model = model,
     Loss = loss,
     OptFunction = _G.optim[opt.optimization],
     OptState = optimState,
     Parameters = {Weights, Gradients},
-  }
+}
 
-  ----------------------------------------------------------------------
-  local function ExtractSampleFunc(data, label)
+----------------------------------------------------------------------
+local function ExtractSampleFunc(data, label)
     return Normalize(data),label
-  end
+end
 
-  ----------------------------------------------------------------------
-  local function Forward(DB, train)
+----------------------------------------------------------------------
+local function Forward(DB, train)
     confusion:zero()
 
     local SizeData = DB:size()
     if not AllowVarBatch then SizeData = math.floor(SizeData/opt.batchSize)*opt.batchSize end
     local dataIndices = torch.range(1, SizeData, opt.bufferSize):long()
-    if train and opt.shuffle then --shuflle batches from LMDB
-      dataIndices = dataIndices:index(1, torch.randperm(dataIndices:size(1)):long())
+    if train and opt.shuffle then --shuffle batches from LMDB
+        dataIndices = dataIndices:index(1, torch.randperm(dataIndices:size(1)):long())
     end
 
     local numBuffers = 2
     local currBuffer = 1
     local BufferSources = {}
     for i=1,numBuffers do
-      BufferSources[i] = DataProvider{
-        Source = {torch.ByteTensor(),torch.IntTensor()}
-      }
+        BufferSources[i] = DataProvider{
+            Source = {torch.ByteTensor(),torch.IntTensor()}
+        }
     end
 
 
     local currBatch = 1
 
     local BufferNext = function()
-      if currBatch >= dataIndices:size(1) then return end
-      currBuffer = currBuffer%numBuffers +1
-      local sizeBuffer = math.min(opt.bufferSize, SizeData - dataIndices[currBatch]+1)
-      BufferSources[currBuffer].Data:resize(sizeBuffer ,unpack(config.SampleSize))
-      BufferSources[currBuffer].Labels:resize(sizeBuffer)
-      DB:AsyncCacheSeq(config.Key(dataIndices[currBatch]), sizeBuffer, BufferSources[currBuffer].Data, BufferSources[currBuffer].Labels)
-      currBatch = currBatch + 1
+        if currBatch >= dataIndices:size(1) then return end
+        currBuffer = currBuffer%numBuffers +1
+        local sizeBuffer = math.min(opt.bufferSize, SizeData - dataIndices[currBatch]+1)
+        BufferSources[currBuffer].Data:resize(sizeBuffer ,unpack(config.SampleSize))
+        BufferSources[currBuffer].Labels:resize(sizeBuffer)
+        DB:AsyncCacheSeq(config.Key(dataIndices[currBatch]), sizeBuffer, BufferSources[currBuffer].Data, BufferSources[currBuffer].Labels)
+        currBatch = currBatch + 1
     end
 
     local MiniBatch = DataProvider{
-      Name = 'GPU_Batch',
-      MaxNumItems = opt.batchSize,
-      Source = BufferSources[currBuffer],
-      ExtractFunction = ExtractSampleFunc,
-      TensorType = TensorType
+        Name = 'GPU_Batch',
+        MaxNumItems = opt.batchSize,
+        Source = BufferSources[currBuffer],
+        ExtractFunction = ExtractSampleFunc,
+        TensorType = TensorType
     }
 
 
@@ -209,74 +209,74 @@ cmd:option('-shuffle',            true,                   'shuffle training samp
 
     while NumSamples < SizeData do
 
-      DB:Synchronize()
-      MiniBatch:Reset()
-      MiniBatch.Source = BufferSources[currBuffer]
-      if train and opt.shuffle then MiniBatch.Source:ShuffleItems() end
-      BufferNext()
+        DB:Synchronize()
+        MiniBatch:Reset()
+        MiniBatch.Source = BufferSources[currBuffer]
+        if train and opt.shuffle then MiniBatch.Source:ShuffleItems() end
+        BufferNext()
 
 
-      while MiniBatch:GetNextBatch() do
-        if train then
-          if opt.nGPU > 1 then
-            model:zeroGradParameters()
-            model:syncParameters()
-          end
-          y, currLoss = optimizer:optimize(x, yt)
-        else
-          y = model:forward(x)
-          currLoss = loss:forward(y,yt)
+        while MiniBatch:GetNextBatch() do
+            if train then
+                if opt.nGPU > 1 then
+                    model:zeroGradParameters()
+                    model:syncParameters()
+                end
+                y, currLoss = optimizer:optimize(x, yt)
+            else
+                y = model:forward(x)
+                currLoss = loss:forward(y,yt)
+            end
+            loss_val = currLoss + loss_val
+            if type(y) == 'table' then --table results - always take first prediction
+                y = y[1]
+            end
+            confusion:batchAdd(y,yt)
+            NumSamples = NumSamples+x:size(1)
+            xlua.progress(NumSamples, SizeData)
         end
-        loss_val = currLoss + loss_val
-        if type(y) == 'table' then --table results - always take first prediction
-          y = y[1]
+        if train and opt.checkpoint >0 and (currBatch % math.ceil(opt.checkpoint/opt.bufferSize) == 0) then
+            print(NumSamples)
+            confusion:updateValids()
+            print('\nAfter ' .. NumSamples .. ' samples, current error is: ' .. 1-confusion.totalValid .. '\n')
+            torch.save(netFilename .. '_checkpoint' .. '.t7', savedModel)
         end
-        confusion:batchAdd(y,yt)
-        NumSamples = NumSamples+x:size(1)
-        xlua.progress(NumSamples, SizeData)
-      end
-      if train and opt.checkpoint >0 and (currBatch % math.ceil(opt.checkpoint/opt.bufferSize) == 0) then
-        print(NumSamples)
-        confusion:updateValids()
-        print('\nAfter ' .. NumSamples .. ' samples, current error is: ' .. 1-confusion.totalValid .. '\n')
-        torch.save(netFilename .. '_checkpoint' .. '.t7', savedModel)
-      end
-      collectgarbage()
+        collectgarbage()
     end
     xlua.progress(NumSamples, SizeData)
     return(loss_val/math.ceil(SizeData/opt.batchSize))
-  end
+end
 
-  local function Train(Data)
+local function Train(Data)
     model:training()
     return Forward(Data, true)
-  end
+end
 
-  local function Test(Data)
+local function Test(Data)
     model:evaluate()
     return Forward(Data, false)
-  end
+end
 
-  ------------------------------
-  data.ValDB:Threads()
-  data.TrainDB:Threads()
+------------------------------
+data.ValDB:Threads()
+data.TrainDB:Threads()
 
 
-  if opt.testonly then opt.epoch = 1 end
-  local epoch = 1
+if opt.testonly then opt.epoch = 1 end
+local epoch = 1
 
-  while epoch ~= opt.epoch do
+while epoch ~= opt.epoch do
     if not opt.testonly then
-      print('\nEpoch ' .. epoch)
-      local LossTrain = Train(data.TrainDB)
-      torch.save(netFilename .. '_' .. epoch .. '.t7', savedModel)
-      if opt.optState then
-        torch.save(optStateFilename .. '_epoch_' .. epoch .. '.t7', optimState)
-      end
-      confusion:updateValids()
-      local ErrTrain = (1-confusion.totalValid)
-      print('\nTraining Loss: ' .. LossTrain)
-      print('Training Classification Error: ' .. ErrTrain)
+        print('\nEpoch ' .. epoch)
+        local LossTrain = Train(data.TrainDB)
+        torch.save(netFilename .. '_' .. epoch .. '.t7', savedModel)
+        if opt.optState then
+            torch.save(optStateFilename .. '_epoch_' .. epoch .. '.t7', optimState)
+        end
+        confusion:updateValids()
+        local ErrTrain = (1-confusion.totalValid)
+        print('\nTraining Loss: ' .. LossTrain)
+        print('Training Classification Error: ' .. ErrTrain)
     end
 
     local LossVal = Test(data.ValDB)
@@ -288,10 +288,10 @@ cmd:option('-shuffle',            true,                   'shuffle training samp
     print('Validation Classification Error = ' .. ErrVal)
 
     if not opt.testonly then
-      Log:add{['Training Error']= ErrTrain, ['Validation Error'] = ErrVal}
-      Log:style{['Training Error'] = '-', ['Validation Error'] = '-'}
-      Log:plot()
+        Log:add{['Training Error']= ErrTrain, ['Validation Error'] = ErrVal}
+        Log:style{['Training Error'] = '-', ['Validation Error'] = '-'}
+        Log:plot()
     end
 
     epoch = epoch+1
-  end
+end
