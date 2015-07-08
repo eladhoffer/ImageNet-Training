@@ -266,15 +266,16 @@ if opt.testonly then opt.epoch = 1 end
 local epoch = 1
 
 while epoch ~= opt.epoch do
+    local ErrTrain, LossTrain
     if not opt.testonly then
         print('\nEpoch ' .. epoch)
-        local LossTrain = Train(data.TrainDB)
+        LossTrain = Train(data.TrainDB)
         torch.save(netFilename .. '_' .. epoch .. '.t7', savedModel)
         if opt.optState then
             torch.save(optStateFilename .. '_epoch_' .. epoch .. '.t7', optimState)
         end
         confusion:updateValids()
-        local ErrTrain = (1-confusion.totalValid)
+        ErrTrain = (1-confusion.totalValid)
         print('\nTraining Loss: ' .. LossTrain)
         print('Training Classification Error: ' .. ErrTrain)
     end
