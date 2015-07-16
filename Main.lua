@@ -180,8 +180,8 @@ local function Forward(DB, train)
     local currBatch = 1
 
     local BufferNext = function()
-        if currBatch >= dataIndices:size(1) then return end
         currBuffer = currBuffer%numBuffers +1
+        if currBatch > dataIndices:size(1) then BufferSources[currBuffer] = nil return end
         local sizeBuffer = math.min(opt.bufferSize, SizeData - dataIndices[currBatch]+1)
         BufferSources[currBuffer].Data:resize(sizeBuffer ,unpack(config.SampleSize))
         BufferSources[currBuffer].Labels:resize(sizeBuffer)
@@ -262,7 +262,7 @@ data.ValDB:Threads()
 data.TrainDB:Threads()
 
 
-if opt.testonly then opt.epoch = 1 end
+if opt.testonly then opt.epoch = 2 end
 local epoch = 1
 
 while epoch ~= opt.epoch do
