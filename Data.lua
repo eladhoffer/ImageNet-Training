@@ -10,7 +10,25 @@ function Normalize(data)
     return data:float():add(-config.DataMean):div(config.DataStd)
 end
 
+
 function ExtractFromLMDBTrain(key, data)
+    local reSample = function(sampled_img)
+        local size_img = sampled_img:size()
+        local szx = torch.random(math.ceil(size_img[3]/4))
+        local szy = torch.random(math.ceil(size_img[2]/4))
+        local startx = torch.random(szx)
+        local starty = torch.random(szy)
+        return image.scale(sampled_img:narrow(2,starty,size_img[2]-szy):narrow(3,startx,size_img[3]-szx),size_img[3],size_img[2])
+    end
+    local rotate = function(angleRange)
+        local applyRot = function(Data)
+            local angle = torch.randn(1)[1]*angleRange
+            local rot = image.rotate(Data,math.rad(angle),'bilinear')
+            return rot
+        end
+        return applyRot
+    end
+
     local wnid = string.split(data.Name,'_')[1]
     local class = config.ImageNetClasses.Wnid2ClassNum[wnid]
     local img = data.Data
@@ -18,8 +36,15 @@ function ExtractFromLMDBTrain(key, data)
         img = image.decompressJPG(img,3,'byte')
     end
     local nDim = img:dim()
+    if config.Augment == 3 then
+      img = rotate(0.1)(img)
+      img = reSample(img)
+    elseif config.Augment == 2 then
+      img = reSample(img)
+    end
     local start_x = math.random(img:size(nDim)-config.InputSize)
     local start_y = math.random(img:size(nDim-1)-config.InputSize)
+
     img = img:narrow(nDim,start_x,config.InputSize):narrow(nDim-1,start_y,config.InputSize)
     local hflip = math.random(2)==1
     if hflip then

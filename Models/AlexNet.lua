@@ -33,17 +33,13 @@ classifier:add(nn.LogSoftMax())
 
 local model = nn.Sequential()
 
-function fillBias(m)
-for i=1, #m.modules do
-    if m:get(i).bias then
-        m:get(i).bias:fill(0.1)
-    end
-end
-end
-
-fillBias(features)
-fillBias(classifier)
 model:add(features):add(classifier)
 
-return model
-
+return {
+  model = model,
+  regime = {
+    epoch        = {1,    19,   30,   44,   53  },
+    learningRate = {1e-2, 5e-3, 1e-3, 5e-4, 1e-4},
+    weightDecay  = {5e-4, 5e-4, 0,    0,    0   }
+  }
+}

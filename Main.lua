@@ -23,6 +23,7 @@ cmd:option('-weightDecay',        5e-4,                     'L2 penalty on the w
 cmd:option('-momentum',           0.9,                      'momentum')
 cmd:option('-batchSize',          128,                      'batch size')
 cmd:option('-optimization',       'sgd',                    'optimization method')
+cmd:option('-augment',            1,                        'data augmentation level - {1 - simple mirror and crops, 2 +scales, 3 +rotations}')
 cmd:option('-epoch',              -1,                       'number of epochs to train, -1 for unbounded')
 cmd:option('-testonly',           false,                    'Just test loaded net on validation set')
 
@@ -54,13 +55,14 @@ torch.setdefaulttensortype('torch.FloatTensor')
 ----------------------------------------------------------------------
 -- Model + Loss:
 local model = require(opt.network)
-
 local loss = nn.ClassNLLCriterion()
+local trainRegime
 
 if torch.type(model) == 'table' then
     if model.loss then
         loss = model.loss
     end
+    trainRegime = model.regime
     model = model.model
 end
 
@@ -133,6 +135,10 @@ print('==>' .. Weights:nElement() ..  ' Parameters')
 print '==> Loss'
 print(loss)
 
+if trainRegime then
+  print '==> Training Regime'
+  print(trainRegime)
+end
 
 ------------------Optimization Configuration--------------------------
 
@@ -149,6 +155,7 @@ local optimizer = Optimizer{
     OptFunction = _G.optim[opt.optimization],
     OptState = optimState,
     Parameters = {Weights, Gradients},
+    Regime = trainRegime
 }
 
 ----------------------------------------------------------------------
@@ -267,8 +274,9 @@ local epoch = 1
 
 while epoch ~= opt.epoch do
     local ErrTrain, LossTrain
-    if not opt.testonly then
+    if not opt.testonly then  
         print('\nEpoch ' .. epoch)
+        optimizer:updateRegime(epoch)
         LossTrain = Train(data.TrainDB)
         torch.save(netFilename .. '_' .. epoch .. '.t7', savedModel)
         if opt.optState then
