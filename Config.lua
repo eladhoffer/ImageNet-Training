@@ -10,19 +10,14 @@ end
 
 return
 {
-    TRAINING_PATH = '/home/ehoffer/Datasets/ImageNet/train/',
-    VALIDATION_PATH = '/home/ehoffer/Datasets/ImageNet/validation/',
-    VALIDATION_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB/validation/',
-    TRAINING_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB/train/',
-    ImageSize = 256,
-    SampleSize = {3,224,224},
+    TRAINING_PATH = '/home/ehoffer/Datasets/ImageNet/train/', --Training images location
+    VALIDATION_PATH = '/home/ehoffer/Datasets/ImageNet/validation/',  --Validation images location
+    VALIDATION_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB/validation/', --Validation LMDB location
+    TRAINING_DIR = '/home/ehoffer/Datasets/ImageNet/LMDB/train/', --Training LMDB location
+    ImageMinSide = 256, --Minimum side length of saved images
     ValidationLabels = torch.load('./ValidationLabels'),
     ImageNetClasses = ImageNetClasses,
-    DataMean = 118.380948,
-    DataStd = 61.896913,
+    Normalization = {'simple', 118.380948, 61.896913}, --Default normalization -global mean, std
     Compressed = true,
     Key = Key
 }
-
-
-

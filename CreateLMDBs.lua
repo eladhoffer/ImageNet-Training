@@ -7,11 +7,10 @@ local gm = require 'graphicsmagick'
 local ffi = require 'ffi'
 local config = require 'Config'
 
-
 -------------------------------Settings----------------------------------------------
 
 local PreProcess = function(Img)
-    local im = image.scale(Img, '^' .. config.ImageSize) --minimum side of ImageSize
+    local im = image.scale(Img, '^' .. config.ImageMinSide) --minimum side of ImageMinSide
 
     if im:dim() == 2 then
         im = im:reshape(1,im:size(1),im:size(2))
