@@ -1,13 +1,13 @@
-require 'eladtools'
 require 'xlua'
 require 'lmdb'
 
-local Threads = require 'threads'
-local ffi = require 'ffi'
+
+local DataProvider = require 'DataProvider'
 local config = require 'Config'
 
 
 function ExtractFromLMDBTrain(data)
+    require 'image'
     local reSample = function(sampledImg)
         local sizeImg = sampledImg:size()
         local szx = torch.random(math.ceil(sizeImg[3]/4))
@@ -33,7 +33,7 @@ function ExtractFromLMDBTrain(data)
     end
 
     if math.min(img:size(2), img:size(3)) ~= config.ImageMinSide then
-      img = image.scale(img, '^' .. config.ImageMinSide)
+        img = image.scale(img, '^' .. config.ImageMinSide)
     end
 
     if config.Augment == 3 then
@@ -55,6 +55,7 @@ function ExtractFromLMDBTrain(data)
 end
 
 function ExtractFromLMDBTest(data)
+    require 'image'
     local wnid = string.split(data.Name,'_')[1]
     local class = config.ImageNetClasses.Wnid2ClassNum[wnid]
     local img = data.Data
@@ -63,7 +64,7 @@ function ExtractFromLMDBTest(data)
     end
 
     if (math.min(img:size(2), img:size(3)) ~= config.ImageMinSide) then
-      img = image.scale(img, '^' .. config.ImageMinSide)
+        img = image.scale(img, '^' .. config.ImageMinSide)
     end
 
     local startX = math.ceil((img:size(3)-config.InputSize[3]+1)/2)
@@ -81,22 +82,22 @@ function Keys(tensor)
 end
 
 function EstimateMeanStd(DB, typeVal, numEst)
-  local typeVal = typeVal or 'simple'
-  local numEst = numEst or 10000
-  local x = torch.FloatTensor(numEst ,unpack(config.InputSize))
-  local randKeys = Keys(torch.randperm(DB:size()):narrow(1,1,numEst))
-  DB:CacheRand(randKeys, x)
-  local dp = DataProvider{
-      Source = {x, nil}
+    local typeVal = typeVal or 'simple'
+    local numEst = numEst or 10000
+    local x = torch.FloatTensor(numEst ,unpack(config.InputSize))
+    local randKeys = Keys(torch.randperm(DB:size()):narrow(1,1,numEst))
+    DB:CacheRand(randKeys, x)
+    local dp = DataProvider.Container{
+        Source = {x, nil}
     }
-  return {typeVal, dp:Normalize(typeVal)}
+    return {typeVal, dp:normalize(typeVal)}
 end
 
-local TrainDB = eladtools.LMDBProvider{
+local TrainDB = DataProvider.LMDBProvider{
     Source = lmdb.env({Path = config.TRAINING_DIR, RDONLY = true}),
     ExtractFunction = ExtractFromLMDBTrain
 }
-local ValDB = eladtools.LMDBProvider{
+local ValDB = DataProvider.LMDBProvider{
     Source = lmdb.env({Path = config.VALIDATION_DIR , RDONLY = true}),
     ExtractFunction = ExtractFromLMDBTest
 }

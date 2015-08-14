@@ -1,10 +1,9 @@
-require 'eladtools'
 require 'image'
 require 'xlua'
 require 'lmdb'
 
 local gm = require 'graphicsmagick'
-local ffi = require 'ffi'
+local DataProvider = require 'DataProvider'
 local config = require 'Config'
 
 -------------------------------Settings----------------------------------------------
@@ -53,12 +52,12 @@ function NameFile(filename)
 
 end
 
-function LMDBFromFilenames(charTensor,env)
+function LMDBFromFilenames(filenamesProvider,env)
     env:open()
     local txn = env:txn()
     local cursor = txn:cursor()
-    for i=1,charTensor:size(1) do
-        local filename = ffi.string(torch.data(charTensor[i]))
+    for i=1, filenamesProvider:size() do
+        local filename = filenamesProvider:getItem(i)
         local data = {Data = LoadImgData(filename), Name = NameFile(filename)}
 
         cursor:put(config.Key(i),data, lmdb.C.MDB_NODUPDATA)
@@ -69,7 +68,7 @@ function LMDBFromFilenames(charTensor,env)
             txn = env:txn()
             cursor = txn:cursor()
         end
-        xlua.progress(i,charTensor:size(1))
+        xlua.progress(i,filenamesProvider:size())
     end
     txn:commit()
     env:close()
@@ -77,31 +76,33 @@ function LMDBFromFilenames(charTensor,env)
 end
 
 
-local TrainingFiles = FileSearcher{
+local TrainingFiles = DataProvider.FileSearcher{
     Name = 'TrainingFilenames',
     CachePrefix = config.TRAINING_DIR,
     MaxNumItems = 1e8,
     CacheFiles = true,
     PathList = {config.TRAINING_PATH},
-    SubFolders = true
+    SubFolders = true,
+    Verbose = true
 }
-local ValidationFiles = FileSearcher{
+local ValidationFiles = DataProvider.FileSearcher{
     Name = 'ValidationFilenames',
     CachePrefix = config.VALIDATION_DIR,
     MaxNumItems = 1e8,
-    PathList = {config.VALIDATION_PATH}
+    PathList = {config.VALIDATION_PATH},
+    Verbose = true
 }
 
-local TrainDB= lmdb.env{
+local TrainDB = lmdb.env{
     Path = config.TRAINING_DIR,
     Name = 'TrainDB'
 }
 
-local ValDB= lmdb.env{
+local ValDB = lmdb.env{
     Path = config.VALIDATION_DIR,
     Name = 'ValDB'
 }
 
-TrainingFiles:ShuffleItems()
-LMDBFromFilenames(ValidationFiles.Data, ValDB)
-LMDBFromFilenames(TrainingFiles.Data, TrainDB)
+TrainingFiles:shuffleItems()
+LMDBFromFilenames(ValidationFiles, ValDB)
+LMDBFromFilenames(TrainingFiles, TrainDB)

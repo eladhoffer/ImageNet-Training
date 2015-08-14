@@ -1,4 +1,3 @@
-require 'eladtools'
 require 'lmdb'
 require 'image'
 
@@ -25,34 +24,34 @@ function BenchmarkDB(DB, Name, num, InputSize, visualize)
 
   key = Key(math.random(DataSetSize-Num))
   t=torch.tic()
-  DB:CacheSeq(key,Num ,x,y)
+  DB:cacheSeq(key,Num ,x,y)
   t=torch.tic()-t
   print('1) Sequential Time: ' .. string.format('%04f',t/Num) .. ' Per sample')
   if visualize then image.display(x) end
 
   randKeys = Keys(torch.randperm(DataSetSize):narrow(1,1,Num))
   t=torch.tic()
-  DB:CacheRand(randKeys,x,y)
+  DB:cacheRand(randKeys,x,y)
   t=torch.tic()-t
   print('2) Random Access Time: ' .. string.format('%04f',t/Num) .. ' Per sample')
   if visualize then image.display(x) end
 
-  print('\n==> Asynchronous timing')
-  DB:Threads()
+  print('\n==> asynchronous timing')
+  DB:threads()
   key = Key(math.random(DataSetSize-Num))
   t=torch.tic()
-  DB:AsyncCacheSeq(key,Num ,x,y)
+  DB:asyncCacheSeq(key,Num ,x,y)
   print('1) Async Sequential Spawn Time: ' .. string.format('%04f',(torch.tic()-t)/Num) .. ' Per sample')
-  DB:Synchronize()
+  DB:synchronize()
   t=torch.tic()-t
   print('   Async Sequential Complete Time: ' .. string.format('%04f',t/Num) .. ' Per sample')
   if visualize then image.display(x) end
 
   randKeys = Keys(torch.randperm(DataSetSize):narrow(1,1,Num))
   t=torch.tic()
-  DB:AsyncCacheRand(randKeys,x,y)
+  DB:asyncCacheRand(randKeys,x,y)
   print('2) Async Random Spawn Time: ' .. string.format('%04f',(torch.tic()-t)/Num) .. ' Per sample')
-  DB:Synchronize()
+  DB:synchronize()
   t=torch.tic()-t
   print('   Async Random Complete Time: ' .. string.format('%04f',t/Num) .. ' Per sample')
   if visualize then image.display(x) end

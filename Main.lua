@@ -3,7 +3,7 @@ require 'optim'
 require 'pl'
 require 'eladtools'
 require 'trepl'
-
+local DataProvider = require 'DataProvider'
 
 ----------------------------------------------------------------------
 
@@ -193,7 +193,7 @@ local function Forward(DB, train)
     local currBuffer = 1
     local BufferSources = {}
     for i=1,numBuffers do
-        BufferSources[i] = DataProvider{
+        BufferSources[i] = DataProvider.Container{
             Source = {torch.ByteTensor(),torch.IntTensor()}
         }
     end
@@ -207,11 +207,11 @@ local function Forward(DB, train)
         local sizeBuffer = math.min(opt.bufferSize, SizeData - dataIndices[currBatch]+1)
         BufferSources[currBuffer].Data:resize(sizeBuffer ,unpack(config.InputSize))
         BufferSources[currBuffer].Labels:resize(sizeBuffer)
-        DB:AsyncCacheSeq(config.Key(dataIndices[currBatch]), sizeBuffer, BufferSources[currBuffer].Data, BufferSources[currBuffer].Labels)
+        DB:asyncCacheSeq(config.Key(dataIndices[currBatch]), sizeBuffer, BufferSources[currBuffer].Data, BufferSources[currBuffer].Labels)
         currBatch = currBatch + 1
     end
 
-    local MiniBatch = DataProvider{
+    local MiniBatch = DataProvider.Container{
         Name = 'GPU_Batch',
         MaxNumItems = opt.batchSize,
         Source = BufferSources[currBuffer],
@@ -229,15 +229,14 @@ local function Forward(DB, train)
     BufferNext()
 
     while NumSamples < SizeData do
-
-        DB:Synchronize()
-        MiniBatch:Reset()
+        DB:synchronize()
+        MiniBatch:reset()
         MiniBatch.Source = BufferSources[currBuffer]
-        if train and opt.shuffle then MiniBatch.Source:ShuffleItems() end
+        if train and opt.shuffle then MiniBatch.Source:shuffleItems() end
         BufferNext()
 
-        while MiniBatch:GetNextBatch() do
-            if #normalization>0 then MiniBatch:Normalize(unpack(normalization)) end
+        while MiniBatch:getNextBatch() do
+            if #normalization>0 then MiniBatch:normalize(unpack(normalization)) end
             if train then
                 if opt.nGPU > 1 then
                     model:zeroGradParameters()
@@ -280,8 +279,8 @@ local function Test(Data)
 end
 
 ------------------------------
-data.ValDB:Threads()
-data.TrainDB:Threads()
+data.ValDB:threads()
+data.TrainDB:threads()
 
 
 if opt.testonly then opt.epoch = 2 end
@@ -290,7 +289,7 @@ local epoch = 1
 while epoch ~= opt.epoch do
     local ErrTrain, LossTrain
     if not opt.testonly then
-        print('\nEpoch ' .. epoch)
+        print('\nEpoch ' .. epoch ..'\n')
         optimizer:updateRegime(epoch, true)
         LossTrain = Train(data.TrainDB)
         torch.save(netFilename .. '_' .. epoch .. '.t7', savedModel)
