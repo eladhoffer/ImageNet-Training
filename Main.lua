@@ -127,7 +127,6 @@ local Weights,Gradients = model:getParameters()
 
 local savedModel --savedModel - lower footprint model to save
 if opt.nGPU > 1 then
-    model:syncParameters()
     savedModel = model.modules[1]:clone('weight','bias','running_mean','running_std')
 else
     savedModel = model:clone('weight','bias','running_mean','running_std')
@@ -166,7 +165,8 @@ local optimState = {
     learningRate = opt.LR,
     momentum = opt.momentum,
     weightDecay = opt.weightDecay,
-    learningRateDecay = opt.LRDecay
+    learningRateDecay = opt.LRDecay,
+    dampening = 0
 }
 
 local optimizer = Optimizer{
@@ -238,11 +238,10 @@ local function Forward(DB, train)
         while MiniBatch:getNextBatch() do
             if #normalization>0 then MiniBatch:normalize(unpack(normalization)) end
             if train then
+                y, currLoss = optimizer:optimize(x, yt)
                 if opt.nGPU > 1 then
-                    model:zeroGradParameters()
                     model:syncParameters()
                 end
-                y, currLoss = optimizer:optimize(x, yt)
             else
                 y = model:forward(x)
                 currLoss = loss:forward(y,yt)
